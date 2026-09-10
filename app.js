@@ -1,4 +1,4 @@
-/* WAP CHAT v2 frontend — polling 1s, lịch sử dùng chung, linkify, xóa chat, admin panel */
+/* WAP CHAT v2 frontend — long-poll realtime, lịch sử dùng chung, linkify, xóa chat, admin panel */
 const $ = (id) => document.getElementById(id);
 const els = {
   loginBox: $('loginBox'), chatBox: $('chatBox'),
@@ -21,7 +21,8 @@ const STICKERS = ["😂","😍","😭","😡","🥳","😱","🤡","💩","👻"
 let me = null; // {username, nick, color, avatar, role}
 let lastId = 0, lastTotal = -1, firstLoad = true;
 let soundOn = true;
-let pollTimer = null, heartTimer = null;
+let polling = false, pollAbort = null, heartTimer = null;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let typingActive = false, typingTimer = null;
 let adminTab = 'msgs', adminUsers = [], adminMsgs = [], adminFilter = '';
 
@@ -128,36 +129,57 @@ async function api(path, opts) {
   if (!r.ok) throw new Error(j.error || ('Lỗi ' + r.status));
   return j;
 }
-async function poll() {
-  if (!me) return;
-  try {
-    const j = await api('/api/messages?user=' + encodeURIComponent(me.username));
-    const list = j.messages || [];
-    if (firstLoad) {
-      fullReload(list);
-      firstLoad = false;
-    } else if (lastTotal >= 0 && (j.total || 0) < lastTotal) {
-      fullReload(list); // có tin bị xóa → vẽ lại (realtime cho mọi user)
-    } else {
-      list.filter((m) => m.id > lastId).forEach((m) => {
-        if (!els.msgs.querySelector(`[data-mid="${m.id}"]`)) {
-          els.msgs.appendChild(msgNode(m));
-          while (els.msgs.children.length > 200) els.msgs.removeChild(els.msgs.firstChild);
-          if (m.user !== 'system' && m.user !== me.username.toLowerCase()) beep();
-          els.msgs.scrollTop = els.msgs.scrollHeight;
-        }
+// Long-poll: gửi total+lastId hiện tại, server giữ request tới khi có đổi mới thì trả ngay.
+// Nhận xong là gọi tiếp request khác ngay (không chờ interval) → tin mới hiện sau ~0.5s.
+async function pollChain() {
+  while (polling && me) {
+    try {
+      if (pollAbort) { try { pollAbort.abort(); } catch (e) {} }
+      pollAbort = new AbortController();
+      const to = setTimeout(() => { try { pollAbort.abort(); } catch (e) {} }, 12000);
+      const q = new URLSearchParams({
+        user: me.username, wait: '1',
+        total: lastTotal >= 0 ? String(lastTotal) : '-1',
+        lastId: String(lastId),
       });
+      const j = await api('/api/messages?' + q.toString(), { signal: pollAbort.signal });
+      clearTimeout(to);
+      handlePoll(j);
+      els.connDot.textContent = '🟢'; els.connTxt.textContent = 'đang kết nối';
+    } catch (e) {
+      if (e && e.name === 'AbortError') continue; // pollNow()/logout: lặp lại ngay
+      els.connDot.textContent = '🔴'; els.connTxt.textContent = 'mất kết nối, đang thử lại...';
+      await sleep(2000);
     }
-    if (list.length) lastId = Math.max(lastId, ...list.map((m) => m.id));
-    if (j.lastId) lastId = Math.max(lastId, j.lastId);
-    lastTotal = j.total ?? lastTotal;
-    renderOnline(j.online || []);
-    renderTyping(j.typing || []);
-    renderStorage(j.storage);
-    els.connDot.textContent = '🟢'; els.connTxt.textContent = 'đang kết nối';
-  } catch (e) {
-    els.connDot.textContent = '🔴'; els.connTxt.textContent = 'mất kết nối, đang thử lại...';
   }
+}
+// Ép làm mới ngay (sau khi xóa/thêm): hủy request đang treo, chuỗi poll tự gọi lại tức thì
+function pollNow() {
+  if (polling && me && pollAbort) { try { pollAbort.abort(); } catch (e) {} }
+}
+function handlePoll(j) {
+  const list = j.messages || [];
+  if (firstLoad) {
+    fullReload(list);
+    firstLoad = false;
+  } else if (lastTotal >= 0 && (j.total || 0) < lastTotal) {
+    fullReload(list); // có tin bị xóa → vẽ lại (realtime cho mọi user)
+  } else {
+    list.filter((m) => m.id > lastId).forEach((m) => {
+      if (!els.msgs.querySelector(`[data-mid="${m.id}"]`)) {
+        els.msgs.appendChild(msgNode(m));
+        while (els.msgs.children.length > 200) els.msgs.removeChild(els.msgs.firstChild);
+        if (m.user !== 'system' && m.user !== me.username.toLowerCase()) beep();
+        els.msgs.scrollTop = els.msgs.scrollHeight;
+      }
+    });
+  }
+  if (list.length) lastId = Math.max(lastId, ...list.map((m) => m.id));
+  if (j.lastId) lastId = Math.max(lastId, j.lastId);
+  lastTotal = j.total ?? lastTotal;
+  renderOnline(j.online || []);
+  renderTyping(j.typing || []);
+  renderStorage(j.storage);
 }
 async function heartbeat(typing) {
   if (!me) return;
@@ -204,7 +226,7 @@ async function deleteMsg(id) {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user: me.username, action: isAdmin() ? 'any' : 'one', ids: [id] }),
     });
-    poll(); // đồng bộ ngay
+    pollNow(); // đồng bộ ngay
   } catch (e) { alert(e.message); }
 }
 
@@ -326,7 +348,7 @@ function renderAdmin() {
       await api('/api/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user: me.username, action: 'all' }) });
       alert('Đã xóa toàn bộ!');
-      poll(); loadAdmin();
+      pollNow(); loadAdmin();
     } catch (e) { alert(e.message); }
   };
   if ($('aDelDate')) $('aDelDate').onclick = async () => {
@@ -337,7 +359,7 @@ function renderAdmin() {
       const j = await api('/api/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user: me.username, action: 'byDate', date: d }) });
       alert(`Đã xóa ${j.deleted} tin ngày ${d}`);
-      poll(); loadAdmin();
+      pollNow(); loadAdmin();
     } catch (e) { alert(e.message); }
   };
   els.adminPanel.querySelectorAll('[data-adel]').forEach((b) => (b.onclick = () => deleteMsg(Number(b.dataset.adel))));
@@ -399,16 +421,18 @@ function enterChat() {
   els.msgs.innerHTML = '';
   lastId = 0; lastTotal = -1; firstLoad = true;
   toggleAdmin(false);
-  poll(); heartbeat(false);
-  clearInterval(pollTimer); clearInterval(heartTimer);
-  pollTimer = setInterval(poll, 1000);              // realtime: quét mỗi 1s (poll GitHub 304 rất nhẹ)
+  polling = true;
+  pollChain(); heartbeat(false);
+  clearInterval(heartTimer);
   heartTimer = setInterval(() => heartbeat(false), 10000); // giữ online
 }
 function doLogout() {
   typingStop();
   heartbeat(false);
+  polling = false;
+  if (pollAbort) { try { pollAbort.abort(); } catch (e) {} }
   me = null; sessionStorage.removeItem('wap_session');
-  clearInterval(pollTimer); clearInterval(heartTimer);
+  clearInterval(heartTimer);
   els.chatBox.style.display = 'none'; els.loginBox.style.display = 'block';
   els.loginErr.textContent = '';
 }
@@ -431,7 +455,7 @@ els.btnMyDel.onclick = async () => {
     const j = await api('/api/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user: me.username, action: 'mine' }) });
     alert(`Đã xóa ${j.deleted} tin của bạn.`);
-    poll();
+    pollNow();
   } catch (e) { alert(e.message); }
 };
 // nút ✕ trên từng tin (ủy quyền vì tin render động)

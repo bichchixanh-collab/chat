@@ -45,10 +45,10 @@ Lưu ý: `data/meta.json` giữ ID tăng dần (để đồng bộ xóa đúng) 
 
 ## 8. Tốc độ đồng bộ (delay bao nhiêu là bình thường?)
 
-- Gửi → hiện ở máy khác mất khoảng **2-4s**: gồm 1 lần ghi GitHub (~1-2s, GitHub phải tạo commit) + poll 1s của máy nhận.
+- Gửi → hiện ở máy khác mất khoảng **1-2s**: gồm 1 lần ghi GitHub (~1s, GitHub phải tạo commit) + long-poll trả ngay sau đó.
 - Lần đầu mở web sau một lúc không ai dùng có thể chậm thêm 1-3s (Vercel "ngủ đông", cần hâm máy).
-- Code đã tối ưu: đọc/ghi song song trong 1 vòng, poll dùng ETag (304, không tốn rate-limit), ID theo thời gian (không cần file meta).
-- **Giới hạn cứng**: chừng nào còn ghi file qua GitHub API thì không thể dưới ~1-2s. Muốn gần như tức thì (<1s) phải đổi backend realtime (Supabase/Vercel KV...) — vẫn giữ nguyên giao diện, bảo mình là mình chuyển.
+- Code đã tối ưu: bên gửi chỉ còn 1 vòng đọc song song + 1 vòng ghi duy nhất, bên nhận long-poll (không quét interval), poll idle dính ETag 304 nên không tốn rate-limit.
+- **Giới hạn cứng**: chừng nào còn ghi file qua GitHub API thì không thể dưới ~1s. Muốn gần như tức thì (<1s) phải đổi backend realtime (Supabase/Vercel KV...) — vẫn giữ nguyên giao diện, bảo mình là mình chuyển.
 
 ## 4. Tính năng
 
@@ -68,7 +68,7 @@ Mọi hành động xóa đều **realtime**: các máy khác tự cập nhật 
 
 ## 5. Realtime kiểu gì?
 
-Vercel serverless không giữ websocket → **polling**: client quét `GET /api/messages` mỗi 1s, nhận 100 tin gần nhất + online + typing. Tin mới → ting + tự cuộn; phát hiện `total` giảm → tự vẽ lại (đồng bộ xóa). Online: ping 10s, quá 30s coi như offline.
+Vercel serverless không giữ websocket → **long-polling**: client gửi `GET /api/messages?wait=1` kèm `total` đang có, server giữ request tới ~7s, có tin mới/xóa là trả ngay → máy nhận thấy sau **~0.5s** (không tốn rate-limit vì lượt check dính ETag 304). Nhận xong client gọi tiếp request khác ngay. Hết 7s không có gì thì tự nhả và gọi lại. Online: ping 10s, quá 30s coi như offline.
 
 ## 6. Cấu trúc
 

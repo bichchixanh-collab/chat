@@ -1,10 +1,15 @@
-// GET  /api/messages?user=x  -> poll realtime: 100 tin gần nhất + online + typing (đọc song song)
+// GET  /api/messages?user=x                 -> trả ngay (100 tin gần nhất + online + typing)
+// GET  /api/messages?user=x&wait=1&total=N&lastId=M -> LONG-POLL: giữ request tới ~7s,
+//      có tin mới/xóa (total hoặc id cuối đổi) là trả ngay → bên nhận thấy gần như tức thì.
 // POST /api/messages { user, nick, avatar, typing } -> heartbeat online (10s/lần)
 const { readJson, writeJson, send, body, cors, storageMode } = require('./_store');
 
 const ONLINE_TIMEOUT = 30000; // 30s không ping coi như offline
 const TYPING_TIMEOUT = 4000; // 4s
-const WINDOW = 100; // số tin trả về mỗi lần poll
+const WINDOW = 100; // số tin trả về mỗi lần
+const WAIT_ROUNDS = 7; // long-poll tối đa ~7s (dưới giới hạn 10s của Vercel free)
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function prune(online) {
   const now = Date.now();
@@ -13,6 +18,28 @@ function prune(online) {
     if (now - ((online[k] || {}).seen || 0) <= ONLINE_TIMEOUT) out[k] = online[k];
   }
   return out;
+}
+
+function toArray(doc) {
+  return Array.isArray(doc) ? doc : doc.messages || [];
+}
+
+async function snapshot(me) {
+  // 1 vòng đọc song song (GitHub 304 dùng ETag nên rất nhẹ)
+  const [doc, onlineRaw, typingRaw] = await Promise.all([
+    readJson('messages.json', { messages: [] }),
+    readJson('online.json', {}),
+    readJson('typing.json', {}),
+  ]);
+  const all = toArray(doc);
+  const total = all.length;
+  const lastId = total ? all[total - 1].id : 0;
+  const online = prune(onlineRaw); // chỉ lọc, không ghi (đỡ tốn 1 write mỗi poll)
+  const now = Date.now();
+  const typing = Object.keys(typingRaw || {}).filter(
+    (u) => u !== me && now - (typingRaw[u] || 0) < TYPING_TIMEOUT
+  );
+  return { all, total, lastId, online, typing, now };
 }
 
 module.exports = async (req, res) => {
@@ -39,32 +66,42 @@ module.exports = async (req, res) => {
 
   const url = new URL(req.url, 'http://localhost');
   const me = (url.searchParams.get('user') || '').toLowerCase();
+  const wait = url.searchParams.get('wait') === '1';
+  const cTotal = parseInt(url.searchParams.get('total') || '-1', 10);
+  const cLast = parseInt(url.searchParams.get('lastId') || '0', 10);
 
-  // 1 vòng đọc song song (GitHub 304 dùng ETag nên poll rất nhẹ)
-  const [doc, onlineRaw, typingRaw] = await Promise.all([
-    readJson('messages.json', { messages: [] }),
-    readJson('online.json', {}),
-    readJson('typing.json', {}),
-  ]);
-  const all = Array.isArray(doc) ? doc : doc.messages || [];
-  const recent = all.slice(-WINDOW);
-  const total = all.length;
-  const lastId = total ? all[total - 1].id : 0;
+  let snap = await snapshot(me);
 
-  const online = prune(onlineRaw); // chỉ lọc, không ghi (đỡ tốn 1 write mỗi poll)
-  const now = Date.now();
-  const typing = Object.keys(typingRaw || {}).filter(
-    (u) => u !== me && now - (typingRaw[u] || 0) < TYPING_TIMEOUT
-  );
+  // Long-poll: chừng nào chưa đổi thì check lại mỗi 1s (lượt check dính 304, không tốn rate-limit)
+  if (wait && cTotal >= 0 && cTotal === snap.total && cLast === snap.lastId) {
+    for (let i = 0; i < WAIT_ROUNDS; i++) {
+      await sleep(1000);
+      // kiểm tra nhẹ: chỉ đọc messages
+      let changed = false;
+      try {
+        const doc = await readJson('messages.json', { messages: [] });
+        const all = toArray(doc);
+        if (all.length !== snap.total || (all.length && all[all.length - 1].id !== snap.lastId)) {
+          changed = true;
+        }
+      } catch (e) {
+        changed = true; // đọc lỗi thì trả snapshot mới cho client thử lại
+      }
+      if (changed || res.writableEnded) break;
+      if (i === WAIT_ROUNDS - 1) break;
+    }
+    if (!res.writableEnded) snap = await snapshot(me);
+  }
 
+  if (res.writableEnded) return;
   return send(res, 200, {
     ok: true,
-    messages: recent,
-    total,
-    lastId,
-    online: Object.entries(online).map(([username, v]) => ({ username, ...v })),
-    typing,
+    messages: snap.all.slice(-WINDOW),
+    total: snap.total,
+    lastId: snap.lastId,
+    online: Object.entries(snap.online).map(([username, v]) => ({ username, ...v })),
+    typing: snap.typing,
     storage: storageMode(),
-    serverTime: now,
+    serverTime: snap.now,
   });
 };

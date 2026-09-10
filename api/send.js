@@ -1,9 +1,17 @@
 // POST /api/send { user, text, type }  type: text | sticker | smile
-// Tối ưu tốc độ: đọc song song + ghi song song (1 vòng), xếp hàng ghi chống mất tin.
-const { findUser, readJson, writeJson, genId, withLock, send, body, cors } = require('./_store');
+// Tối ưu tốc độ: 1 vòng đọc song song (users+messages+typing) + 1 vòng ghi duy nhất (messages).
+// - Không ghi typing.json ở đây: client tự heartbeat typing=false sau khi gửi, quá 4s cũng tự hết.
+// - Xếp hàng ghi (lock) chống mất tin khi gửi dồn.
+const { readJson, writeJson, genId, withLock, send, body, cors } = require('./_store');
 
 const MAX_LEN = 500;
 const lastSend = {}; // chống spam: 800ms / user
+
+function httpErr(status, message) {
+  const e = new Error(message);
+  e.status = status;
+  return e;
+}
 
 module.exports = async (req, res) => {
   cors(res, 'POST, OPTIONS');
@@ -18,9 +26,6 @@ module.exports = async (req, res) => {
   if (!username) return send(res, 400, { ok: false, error: 'Chưa đăng nhập!' });
   if (!text) return send(res, 400, { ok: false, error: 'Tin nhắn rỗng!' });
 
-  const info = await findUser(username);
-  if (!info) return send(res, 403, { ok: false, error: 'Tài khoản không tồn tại (liên hệ admin)!' });
-
   const now = Date.now();
   if (now - (lastSend[username] || 0) < 800)
     return send(res, 429, { ok: false, error: 'Gửi chậm thôi bạn ơi!' });
@@ -28,11 +33,15 @@ module.exports = async (req, res) => {
 
   try {
     const msg = await withLock(async () => {
-      // 1 vòng đọc song song
-      const [msgDoc, typing] = await Promise.all([
+      // 1 vòng đọc song song duy nhất
+      const [usersDoc, msgDoc] = await Promise.all([
+        readJson('users.json', { users: [] }),
         readJson('messages.json', { messages: [] }),
-        readJson('typing.json', {}),
       ]);
+      const users = Array.isArray(usersDoc) ? usersDoc : usersDoc.users || [];
+      const info = users.find((x) => String(x.username).toLowerCase() === username);
+      if (!info) throw httpErr(403, 'Tài khoản không tồn tại (liên hệ admin)!');
+
       const all = Array.isArray(msgDoc) ? msgDoc : msgDoc.messages || [];
       const m = {
         id: genId(),
@@ -50,19 +59,13 @@ module.exports = async (req, res) => {
         msgDoc && !Array.isArray(msgDoc) && typeof msgDoc === 'object'
           ? { ...msgDoc, messages: keep }
           : keep;
-      // 1 vòng ghi song song
-      const jobs = [writeJson('messages.json', outDoc)];
-      if (typing[username]) {
-        const t2 = { ...typing };
-        delete t2[username];
-        jobs.push(writeJson('typing.json', t2));
-      }
-      await Promise.all(jobs);
+      await writeJson('messages.json', outDoc); // vòng ghi duy nhất
       return m;
     });
     return send(res, 200, { ok: true, message: msg });
   } catch (e) {
-    console.error('[send]', e.message);
+    if (e && e.status) return send(res, e.status, { ok: false, error: e.message });
+    console.error('[send]', (e && e.message) || e);
     return send(res, 500, { ok: false, error: 'Gửi thất bại, thử lại!' });
   }
 };
