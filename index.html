@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>WAP CHAT • Phòng chung</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>">
+</head>
+<body>
+<div id="wap">
+
+  <!-- ===== HEADER kiểu WAP xưa ===== -->
+  <div id="header">
+    <div class="logo">💬 <b>WAP CHAT</b> <span class="ver">v1.0</span></div>
+    <div class="statusbar">
+      <span id="onlineCount">● 0 online</span>
+      <span id="clock">--:--</span>
+    </div>
+  </div>
+
+  <!-- ===== MÀN HÌNH ĐĂNG NHẬP ===== -->
+  <div id="loginBox" class="panel">
+    <div class="panel-title">🔑 Đăng nhập chém gió</div>
+    <div class="login-ava">📱</div>
+    <label>Tên đăng nhập:</label>
+    <input id="inUser" placeholder="user1 / user2 / user3" autocomplete="username" maxlength="20">
+    <label>Mật khẩu:</label>
+    <input id="inPass" type="password" placeholder="pass1 / pass2 / pass3" autocomplete="current-password" maxlength="50">
+    <label class="remember"><input type="checkbox" id="inRemember" checked> Ghi nhớ tôi</label>
+    <button id="btnLogin" class="btn-main">» Vào chát «</button>
+    <div id="loginErr" class="err"></div>
+    <div class="hint">
+      Tài khoản mặc định:<br>
+      <code>user1 / pass1</code> • <code>user2 / pass2</code> • <code>user3 / pass3</code><br>
+      (sửa trong <code>data/users.json</code>)
+    </div>
+  </div>
+
+  <!-- ===== MÀN HÌNH CHAT ===== -->
+  <div id="chatBox" style="display:none">
+    <div id="nav" class="nav">
+      <span id="meInfo">👤 -</span>
+      <span>
+        <button id="btnSound" class="linkbtn" title="Bật/tắt tiếng">🔔</button>
+        <button id="btnLogout" class="linkbtn">Thoát ✕</button>
+      </span>
+    </div>
+
+    <div id="onlineBar">⏳ đang tải...</div>
+    <div id="typingBar"></div>
+    <div id="msgs"></div>
+
+    <!-- panel cười -->
+    <div id="smilePanel" style="display:none"></div>
+    <!-- panel sticker -->
+    <div id="stickerPanel" style="display:none"></div>
+
+    <div id="inputBar">
+      <button id="btnSmile" title="Mặt cười">😀</button>
+      <input id="inMsg" placeholder="Nhắn gì đi..." maxlength="500" autocomplete="off">
+      <button id="btnSticker" title="Sticker">🎁</button>
+      <button id="btnSend" class="btn-main">Gửi</button>
+    </div>
+    <div class="footer">wap chat • realtime • lưu bằng .json • <span id="connDot">🟢</span> <span id="connTxt">đang kết nối</span></div>
+  </div>
+
+</div>
+<script src="app.js"></script>
+</body>
+</html>

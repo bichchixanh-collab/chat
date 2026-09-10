@@ -1,0 +1,15 @@
+{
+  "// HƯỚNG DẪN": "File lưu lịch sử chat. Không cần sửa tay, app tự ghi. Xóa mảng về [] để reset chat.",
+  "messages": [
+    {
+      "id": 1,
+      "user": "system",
+      "nick": "Hệ thống",
+      "avatar": "📢",
+      "color": "#666666",
+      "text": "Chào mừng đến với WAP CHAT! Mời user1, user2, user3 đăng nhập để chém gió.",
+      "type": "system",
+      "time": 1725800000000
+    }
+  ]
+}

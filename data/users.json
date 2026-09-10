@@ -1,0 +1,27 @@
+{
+  "// HƯỚNG DẪN": "Sửa file này để thay đổi user/pass. Upload lên GitHub + Vercel là tự nhận.",
+  "// FORMAT": "username: tên đăng nhập, password: mật khẩu, nick: tên hiển thị, color: màu nick, avatar: icon hiển thị",
+  "users": [
+    {
+      "username": "user1",
+      "password": "pass1",
+      "nick": "User Một",
+      "color": "#d60000",
+      "avatar": "🐯"
+    },
+    {
+      "username": "user2",
+      "password": "pass2",
+      "nick": "User Hai",
+      "color": "#0066cc",
+      "avatar": "🐼"
+    },
+    {
+      "username": "user3",
+      "password": "pass3",
+      "nick": "User Ba",
+      "color": "#008800",
+      "avatar": "🦊"
+    }
+  ]
+}

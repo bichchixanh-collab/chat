@@ -1,0 +1,7 @@
+{
+  "name": "wap-chat",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WAP Chat realtime - luu bang file .json, deploy Vercel",
+  "engines": { "node": ">=18" }
+}
