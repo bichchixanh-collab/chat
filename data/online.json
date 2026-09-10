@@ -3,5 +3,10 @@
     "seen": 1789046097794,
     "nick": "User Một",
     "avatar": "🐯"
+  },
+  "admin": {
+    "seen": 1789046117810,
+    "nick": "Quản trị",
+    "avatar": "👑"
   }
 }
