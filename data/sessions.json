@@ -4,6 +4,10 @@
     "9d335d81063d709a8be92643e3e02b0b72623a954688bf40ace5b7d9f90a960c": {
       "user": "user3",
       "expiry": 1789132181565
+    },
+    "c0ba941745863b848e095a98edafe6739217859b738a05da7a0948bf480ba700": {
+      "user": "admin",
+      "expiry": 1789132516169
     }
   }
 }
