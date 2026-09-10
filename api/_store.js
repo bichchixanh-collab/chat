@@ -216,6 +216,120 @@ async function pushSystem(text, knownAll) {
   await saveMessages(all);
 }
 
+// ---------- SESSION 24h (token + cookie) ----------
+// Server chỉ lưu SHA256 của token trong data/sessions.json (kể cả repo public cũng không lộ phiên).
+// Token thật nằm ở trình duyệt (cookie + localStorage), hết hạn sau 24h kể từ lần đăng nhập.
+const crypto = require('crypto');
+const SESSION_TTL = 24 * 3600 * 1000; // 24 giờ
+const SESSION_EXTEND_THRESHOLD = 6 * 3600 * 1000; // còn dưới 6h mà vẫn online → gia hạn thêm 24h
+
+function newToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+function hashToken(t) {
+  return crypto.createHash('sha256').update(String(t || ''), 'utf8').digest('hex');
+}
+async function readSessionDoc() {
+  const d = await readJson('sessions.json', { sessions: {} });
+  const doc = d && typeof d === 'object' && !Array.isArray(d) ? d : { sessions: {} };
+  if (!doc.sessions || typeof doc.sessions !== 'object') doc.sessions = {};
+  return doc;
+}
+function pruneSessions(sessions) {
+  const now = Date.now();
+  let n = 0;
+  for (const h of Object.keys(sessions)) {
+    if (!sessions[h] || sessions[h].expiry <= now) {
+      delete sessions[h];
+      n++;
+    }
+  }
+  return n;
+}
+async function createSession(username) {
+  return withLock(async () => {
+    const token = newToken();
+    const expiresAt = Date.now() + SESSION_TTL;
+    const doc = await readSessionDoc();
+    pruneSessions(doc.sessions);
+    doc.sessions[hashToken(token)] = { user: String(username).toLowerCase(), expiry: expiresAt };
+    await writeJson('sessions.json', doc);
+    return { token, expiresAt };
+  });
+}
+async function verifySession(token) {
+  if (!token) return null;
+  const doc = await readSessionDoc();
+  const h = hashToken(token);
+  const s = doc.sessions[h];
+  if (!s) return null;
+  if (s.expiry <= Date.now()) {
+    await withLock(async () => {
+      const d2 = await readSessionDoc();
+      if (d2.sessions[h]) {
+        delete d2.sessions[h];
+        await writeJson('sessions.json', d2);
+      }
+    });
+    return null;
+  }
+  const user = await findUser(s.user);
+  if (!user) return null;
+  return { user, expiry: s.expiry, hash: h };
+}
+async function extendSession(hash) {
+  return withLock(async () => {
+    const doc = await readSessionDoc();
+    const s = doc.sessions[hash];
+    if (!s || s.expiry <= Date.now()) return 0;
+    if (s.expiry - Date.now() < SESSION_EXTEND_THRESHOLD) {
+      s.expiry = Date.now() + SESSION_TTL;
+      await writeJson('sessions.json', doc);
+    }
+    return s.expiry;
+  });
+}
+async function destroySession(token) {
+  if (!token) return;
+  return withLock(async () => {
+    const doc = await readSessionDoc();
+    const h = hashToken(token);
+    if (doc.sessions[h]) {
+      delete doc.sessions[h];
+      await writeJson('sessions.json', doc);
+    }
+  });
+}
+// Token gửi lên qua body.token, query ?token= hoặc cookie wap_token (trình duyệt tự gửi)
+function getTokenFromReq(req, b) {
+  if (b && b.token) return String(b.token);
+  try {
+    const u = new URL(req.url, 'http://localhost');
+    const q = u.searchParams.get('token');
+    if (q) return q;
+  } catch (e) {}
+  const c = req.headers && req.headers.cookie;
+  if (c) {
+    const m = String(c).match(/(?:^|;\s*)wap_token=([^;]+)/);
+    if (m) {
+      try {
+        return decodeURIComponent(m[1]);
+      } catch (e) {
+        return m[1];
+      }
+    }
+  }
+  return '';
+}
+function setSessionCookie(res, token, remember) {
+  let v = `wap_token=${encodeURIComponent(token)}; Path=/; SameSite=Lax`;
+  if (remember) v += `; Max-Age=${24 * 3600}`; // nhớ 24h; không nhớ = cookie theo tab
+  res.setHeader('Set-Cookie', v);
+}
+function clearSessionCookie(res) {
+  res.setHeader('Set-Cookie', 'wap_token=; Path=/; Max-Age=0; SameSite=Lax');
+}
+
 // Ngày theo giờ Việt Nam (dùng cho "xóa chat theo ngày")
 function vnDate(t) {
   return new Date(Number(t) + 7 * 3600 * 1000).toISOString().slice(0, 10);
@@ -260,6 +374,14 @@ module.exports = {
   genId,
   withLock,
   pushSystem,
+  SESSION_TTL,
+  createSession,
+  verifySession,
+  extendSession,
+  destroySession,
+  getTokenFromReq,
+  setSessionCookie,
+  clearSessionCookie,
   vnDate,
   send,
   body,

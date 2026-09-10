@@ -2,7 +2,7 @@
 // GET  /api/messages?user=x&wait=1&total=N&lastId=M -> LONG-POLL: giữ request tới ~7s,
 //      có tin mới/xóa (total hoặc id cuối đổi) là trả ngay → bên nhận thấy gần như tức thì.
 // POST /api/messages { user, nick, avatar, typing } -> heartbeat online (10s/lần)
-const { readJson, writeJson, send, body, cors, storageMode } = require('./_store');
+const { readJson, writeJson, verifySession, extendSession, getTokenFromReq, send, body, cors, storageMode } = require('./_store');
 
 const ONLINE_TIMEOUT = 30000; // 30s không ping coi như offline
 const TYPING_TIMEOUT = 4000; // 4s
@@ -61,7 +61,18 @@ module.exports = async (req, res) => {
       else delete typing[u];
     }
     await Promise.all([writeJson('online.json', online), writeJson('typing.json', typing)]);
-    return send(res, 200, { ok: true });
+
+    // kiểm tra session 24h (kèm token): hết hạn thì báo client đá về màn hình login;
+    // còn dưới 6h mà vẫn online thì gia hạn thêm 24h. Không gửi token thì bỏ qua.
+    let sessionValid = null;
+    let expiresAt = 0;
+    const tok = getTokenFromReq(req, b);
+    if (tok) {
+      const v = await verifySession(tok);
+      sessionValid = !!v;
+      if (v) expiresAt = await extendSession(v.hash);
+    }
+    return send(res, 200, { ok: true, sessionValid, expiresAt });
   }
 
   const url = new URL(req.url, 'http://localhost');

@@ -54,6 +54,8 @@ Lưu ý: `data/meta.json` giữ ID tăng dần (để đồng bộ xóa đúng) 
 
 | Tính năng | Ai dùng | Cách dùng |
 |---|---|---|
+| Đăng nhập giữ 24 giờ | mọi user | tick **Ghi nhớ tôi (24 giờ)** khi login → tắt máy mở lại vẫn vào thẳng phòng chat; bỏ tick = chỉ giữ theo tab. Hết 24h (hoặc bấm Thoát) thì login lại. Đang online mà hết hạn sẽ có thông báo + đá về login. Còn dưới 6h mà vẫn online thì tự gia hạn thêm 24h |
+|---|---|---|
 | Chat / sticker / smile realtime | mọi user | gõ + Gửi; 😀 chèn cười, 🎁 gửi sticker ngay (~2s mọi người thấy) |
 | Lịch sử dùng chung | mọi user | vào phòng là tự tải 100 tin gần nhất, thoát ra vào lại vẫn còn |
 | Nhận diện link | mọi user | dán `https://...` hoặc `www...` tự thành link bấm được; link ảnh (.jpg/.png/.gif/.webp) tự nhúng thumbnail |
@@ -74,14 +76,16 @@ Vercel serverless không giữ websocket → **long-polling**: client gửi `GET
 
 ```
 index.html / style.css / app.js -> giao diện wap + admin panel
-api/login.js    -> POST {username,password}
-api/messages.js -> GET poll (100 tin + online + typing) / POST heartbeat
+api/login.js    -> POST {username,password,remember} (cấp token + cookie 24h)
+api/session.js  -> GET verify token / POST logout (tự đăng nhập lại, hủy phiên)
+api/messages.js -> GET long-poll / POST heartbeat (kèm kiểm tra + gia hạn session)
 api/send.js     -> POST {user,text,type} (đọc/ghi song song + xếp hàng chống mất tin)
 api/delete.js   -> POST {user, action: one|mine (mọi user) / any|all|byDate (admin)}
 api/admin.js    -> GET/POST quản lý users + xem tin (chỉ admin)
-api/_store.js   -> đọc/ghi .json (file local | GitHub repo | /tmp tạm) + genId + lock
+api/_store.js   -> đọc/ghi .json (file local | GitHub repo | /tmp tạm) + genId + lock + session
 data/users.json -> tài khoản ———————— sửa được
 data/messages.json -> lịch sử chat (giữ 300 tin)
+data/sessions.json -> phiên đăng nhập 24h (chỉ lưu SHA256 token — đừng sửa tay)
 data/online.json, typing.json -> trạng thái online/đang gõ
 ```
 

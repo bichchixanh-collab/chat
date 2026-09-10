@@ -19,6 +19,7 @@ const SMILE_LIST = ["😀","😁","😂","🤣","😊","😍","😘","😎","�
 const STICKERS = ["😂","😍","😭","😡","🥳","😱","🤡","💩","👻","🎃","🐱","🐶","🐼","🦊","🐸","🦁","🐵","🐷","💘","💔","🔥","⭐","🌹","🎁","🍺","⚽","🚀","👍","👎","✌️","🤝","🙏"];
 
 let me = null; // {username, nick, color, avatar, role}
+let authToken = null; // token session 24h (cookie + storage)
 let lastId = 0, lastTotal = -1, firstLoad = true;
 let soundOn = true;
 let polling = false, pollAbort = null, heartTimer = null;
@@ -67,6 +68,58 @@ function beep() {
     o.frequency.value = 880; g.gain.value = 0.08;
     o.start(); o.stop(ctx.currentTime + 0.12);
   } catch (e) {}
+}
+
+// ---- session 24h: cookie + storage song song ----
+function setCookie(name, val, hours) {
+  let s = `${name}=${encodeURIComponent(val)}; Path=/; SameSite=Lax`;
+  if (hours) s += `; Max-Age=${Math.round(hours * 3600)}`;
+  document.cookie = s;
+}
+function getCookie(name) {
+  const m = String(document.cookie || '').match(new RegExp('(?:^|;\\s*)' + name + '=([^;]+)'));
+  return m ? decodeURIComponent(m[1]) : '';
+}
+// remember=true: localStorage + cookie 24h (tắt trình duyệt vẫn còn). false: theo tab.
+function saveToken(token, remember) {
+  authToken = token;
+  try {
+    if (remember) {
+      localStorage.setItem('wap_token', token);
+      sessionStorage.removeItem('wap_token');
+    } else {
+      sessionStorage.setItem('wap_token', token);
+      localStorage.removeItem('wap_token');
+    }
+  } catch (e) {}
+  setCookie('wap_token', token, remember ? 24 : 0);
+}
+function tokenSource() {
+  try {
+    if (sessionStorage.getItem('wap_token')) return 'session';
+    if (localStorage.getItem('wap_token')) return 'local';
+  } catch (e) {}
+  return getCookie('wap_token') ? 'cookie' : '';
+}
+function getStoredToken() {
+  try {
+    return (
+      sessionStorage.getItem('wap_token') ||
+      localStorage.getItem('wap_token') ||
+      getCookie('wap_token') ||
+      ''
+    );
+  } catch (e) {
+    return getCookie('wap_token') || '';
+  }
+}
+function clearToken() {
+  authToken = null;
+  try {
+    localStorage.removeItem('wap_token');
+    sessionStorage.removeItem('wap_token');
+  } catch (e) {}
+  document.cookie = 'wap_token=; Path=/; Max-Age=0; SameSite=Lax';
 }
 
 // ---- render tin nhắn ----
@@ -184,10 +237,16 @@ function handlePoll(j) {
 async function heartbeat(typing) {
   if (!me) return;
   try {
-    await fetch('/api/messages', {
+    const r = await fetch('/api/messages', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user: me.username, nick: me.nick, avatar: me.avatar, typing }),
+      body: JSON.stringify({ user: me.username, nick: me.nick, avatar: me.avatar, typing, token: authToken }),
     });
+    const j = await r.json().catch(() => ({}));
+    // token hết hạn/bị xóa (đổi pass, admin xóa...) → đá về login 1 lần duy nhất
+    if (j && j.sessionValid === false && polling && me) {
+      alert('Phiên đăng nhập hết hạn (quá 24 giờ). Đăng nhập lại nhé!');
+      doLogout();
+    }
   } catch (e) {}
 }
 function typingStart() {
@@ -400,14 +459,17 @@ async function doLogin() {
   if (!u || !p) { els.loginErr.textContent = 'Nhập đủ tên + mật khẩu!'; return; }
   els.btnLogin.disabled = true; els.btnLogin.textContent = '... đang vào ...';
   try {
+    const remember = els.inRemember.checked;
     const j = await api('/api/login', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: u, password: p }),
+      body: JSON.stringify({ username: u, password: p, remember }),
     });
     me = j.user;
-    if (els.inRemember.checked) localStorage.setItem('wap_user', els.inUser.value.trim());
-    else localStorage.removeItem('wap_user');
-    sessionStorage.setItem('wap_session', JSON.stringify(me));
+    saveToken(j.token, remember); // cookie + storage, hết hạn 24h
+    try {
+      if (remember) localStorage.setItem('wap_user', els.inUser.value.trim());
+      else localStorage.removeItem('wap_user');
+    } catch (e) {}
     enterChat();
   } catch (e) { els.loginErr.textContent = e.message; }
   els.btnLogin.disabled = false; els.btnLogin.textContent = '» Vào chát «';
@@ -428,13 +490,22 @@ function enterChat() {
 }
 function doLogout() {
   typingStop();
-  heartbeat(false);
+  const tok = authToken;
   polling = false;
   if (pollAbort) { try { pollAbort.abort(); } catch (e) {} }
-  me = null; sessionStorage.removeItem('wap_session');
+  me = null;
+  clearToken(); // xóa cookie + storage
+  try { sessionStorage.removeItem('wap_session'); } catch (e) {} // key bản cũ
   clearInterval(heartTimer);
   els.chatBox.style.display = 'none'; els.loginBox.style.display = 'block';
   els.loginErr.textContent = '';
+  // báo server hủy phiên (best-effort, không chặn UI)
+  if (tok) {
+    fetch('/api/session', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'logout', token: tok }),
+    }).catch(() => {});
+  }
 }
 
 // ---- events ----
@@ -470,13 +541,22 @@ setInterval(() => {
   els.clock.textContent = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }, 1000);
 
-// tự đăng nhập lại
-(function init() {
+// mở web: có token còn hạn 24h thì vào thẳng phòng chat, khỏi đăng nhập lại
+(async function init() {
   buildPanels();
-  const saved = localStorage.getItem('wap_user');
-  if (saved) els.inUser.value = saved;
   try {
-    const s = sessionStorage.getItem('wap_session');
-    if (s) { me = JSON.parse(s); enterChat(); }
+    const saved = localStorage.getItem('wap_user');
+    if (saved) els.inUser.value = saved;
   } catch (e) {}
+  const tok = getStoredToken();
+  if (!tok) return;
+  try {
+    const j = await api('/api/session?token=' + encodeURIComponent(tok));
+    me = j.user;
+    const src = tokenSource();
+    saveToken(tok, src !== 'session'); // chuẩn hóa lại mirror cookie/storage
+    enterChat();
+  } catch (e) {
+    clearToken(); // token hết hạn/sai → ở lại màn hình login
+  }
 })();

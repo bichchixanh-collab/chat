@@ -1,0 +1,4 @@
+{
+  "// HƯỚNG DẪN": "Phiên đăng nhập 24h. Server chỉ lưu SHA256 của token (không lộ phiên). App tự dọn, không cần sửa tay.",
+  "sessions": {}
+}
