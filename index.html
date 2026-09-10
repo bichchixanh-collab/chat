@@ -12,12 +12,15 @@
 
   <!-- ===== HEADER kiểu WAP xưa ===== -->
   <div id="header">
-    <div class="logo">💬 <b>WAP CHAT</b> <span class="ver">v1.0</span></div>
+    <div class="logo">💬 <b>WAP CHAT</b> <span class="ver">v2.0</span></div>
     <div class="statusbar">
       <span id="onlineCount">● 0 online</span>
       <span id="clock">--:--</span>
     </div>
   </div>
+
+  <!-- cảnh báo khi storage tạm (Vercel chưa cấu hình token) -->
+  <div id="storeWarn" style="display:none"></div>
 
   <!-- ===== MÀN HÌNH ĐĂNG NHẬP ===== -->
   <div id="loginBox" class="panel">
@@ -26,12 +29,13 @@
     <label>Tên đăng nhập:</label>
     <input id="inUser" placeholder="user1 / user2 / user3" autocomplete="username" maxlength="20">
     <label>Mật khẩu:</label>
-    <input id="inPass" type="password" placeholder="pass1 / pass2 / pass3" autocomplete="current-password" maxlength="50">
+    <input id="inPass" type="password" placeholder="mật khẩu của bạn" autocomplete="current-password" maxlength="50">
     <label class="remember"><input type="checkbox" id="inRemember" checked> Ghi nhớ tôi</label>
     <button id="btnLogin" class="btn-main">» Vào chát «</button>
     <div id="loginErr" class="err"></div>
     <div class="hint">
       Tài khoản mặc định:<br>
+      <code>admin / admin123</code> 👑 (toàn quyền)<br>
       <code>user1 / pass1</code> • <code>user2 / pass2</code> • <code>user3 / pass3</code><br>
       (sửa trong <code>data/users.json</code>)
     </div>
@@ -42,6 +46,7 @@
     <div id="nav" class="nav">
       <span id="meInfo">👤 -</span>
       <span>
+        <button id="btnAdmin" class="linkbtn" style="display:none">⚙ Admin</button>
         <button id="btnSound" class="linkbtn" title="Bật/tắt tiếng">🔔</button>
         <button id="btnLogout" class="linkbtn">Thoát ✕</button>
       </span>
@@ -51,16 +56,23 @@
     <div id="typingBar"></div>
     <div id="msgs"></div>
 
-    <!-- panel cười -->
+    <!-- panel cười / sticker -->
     <div id="smilePanel" style="display:none"></div>
-    <!-- panel sticker -->
     <div id="stickerPanel" style="display:none"></div>
+
+    <!-- admin panel (chỉ admin) -->
+    <div id="adminPanel" style="display:none"></div>
 
     <div id="inputBar">
       <button id="btnSmile" title="Mặt cười">😀</button>
-      <input id="inMsg" placeholder="Nhắn gì đi..." maxlength="500" autocomplete="off">
+      <input id="inMsg" placeholder="Nhắn gì đi... (dán link tự thành clickable)" maxlength="500" autocomplete="off">
       <button id="btnSticker" title="Sticker">🎁</button>
       <button id="btnSend" class="btn-main">Gửi</button>
+    </div>
+    <div id="toolBar">
+      <button id="btnMyDel" class="toolbtn">🗑 Xóa chat của tôi</button>
+      <span class="spacer"></span>
+      <span id="storeBadge" title="Nơi lưu trữ">💾 ...</span>
     </div>
     <div class="footer">wap chat • realtime • lưu bằng .json • <span id="connDot">🟢</span> <span id="connTxt">đang kết nối</span></div>
   </div>

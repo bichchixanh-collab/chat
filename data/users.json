@@ -1,27 +1,38 @@
 {
-  "// HƯỚNG DẪN": "Sửa file này để thay đổi user/pass. Upload lên GitHub + Vercel là tự nhận.",
-  "// FORMAT": "username: tên đăng nhập, password: mật khẩu, nick: tên hiển thị, color: màu nick, avatar: icon hiển thị",
+  "// HƯỚNG DẪN": "Sửa file này để thay đổi user/pass. role=admin có toàn quyền (admin panel, xóa mọi chat).",
+  "// FORMAT": "username, password, nick (tên hiển thị), color (màu nick), avatar, role (user|admin)",
   "users": [
+    {
+      "username": "admin",
+      "password": "admin123",
+      "nick": "Quản trị",
+      "color": "#7c3aed",
+      "avatar": "👑",
+      "role": "admin"
+    },
     {
       "username": "user1",
       "password": "pass1",
       "nick": "User Một",
       "color": "#d60000",
-      "avatar": "🐯"
+      "avatar": "🐯",
+      "role": "user"
     },
     {
       "username": "user2",
       "password": "pass2",
       "nick": "User Hai",
       "color": "#0066cc",
-      "avatar": "🐼"
+      "avatar": "🐼",
+      "role": "user"
     },
     {
       "username": "user3",
       "password": "pass3",
       "nick": "User Ba",
       "color": "#008800",
-      "avatar": "🦊"
+      "avatar": "🦊",
+      "role": "user"
     }
   ]
 }

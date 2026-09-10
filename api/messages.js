@@ -1,73 +1,65 @@
-// GET /api/messages?since=0  -> poll realtime (chat + sticker + smile đều qua đây)
-// POST /api/messages { user } -> heartbeat online (giữ tương thích cũ)
-const { readJson, writeJson, send, body } = require('./_store');
+// GET  /api/messages?user=x  -> poll realtime: trả 100 tin gần nhất + online + typing
+//   Client tự so id mới / id biến mất để thêm tin + đồng bộ các tin đã bị xóa (realtime).
+// POST /api/messages { user, nick, avatar, typing } -> heartbeat online (10s/lần)
+const { readJson, writeJson, send, body, cors, storageMode } = require('./_store');
 
-const ONLINE_TIMEOUT = 15000; // 15s không ping coi như offline
-const TYPING_TIMEOUT = 4000;  // 4s
+const ONLINE_TIMEOUT = 30000; // 30s không ping coi như offline
+const TYPING_TIMEOUT = 4000; // 4s
+const WINDOW = 100; // số tin trả về mỗi lần poll
 
-function pruneOnline() {
-  const online = readJson('online.json', {});
+function prune(online) {
   const now = Date.now();
-  let changed = false;
-  for (const k of Object.keys(online)) {
-    if (now - (online[k].seen || 0) > ONLINE_TIMEOUT) { delete online[k]; changed = true; }
+  const out = {};
+  for (const k of Object.keys(online || {})) {
+    if (now - ((online[k] || {}).seen || 0) <= ONLINE_TIMEOUT) out[k] = online[k];
   }
-  if (changed) writeJson('online.json', online);
-  return online;
-}
-
-function getTyping(except) {
-  const typing = readJson('typing.json', {});
-  const now = Date.now();
-  return Object.keys(typing)
-    .filter((u) => u !== except && now - (typing[u] || 0) < TYPING_TIMEOUT)
-    .map((u) => u);
+  return out;
 }
 
 module.exports = async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  cors(res, 'GET, POST, OPTIONS');
   if (req.method === 'OPTIONS') return send(res, 200, { ok: true });
 
-  // heartbeat: client ping kèm user mỗi 5s
   if (req.method === 'POST') {
     const b = await body(req);
-    if (b.user) {
-      const online = readJson('online.json', {});
-      online[String(b.user).toLowerCase()] = {
-        seen: Date.now(),
-        nick: b.nick || b.user,
-        avatar: b.avatar || '👤',
-      };
-      writeJson('online.json', online);
-    }
-    if (typeof b.typing !== 'undefined' && b.user) {
-      const typing = readJson('typing.json', {});
-      if (b.typing) typing[String(b.user).toLowerCase()] = Date.now();
-      else delete typing[String(b.user).toLowerCase()];
-      writeJson('typing.json', typing);
+    const u = String(b.user || '').trim().toLowerCase();
+    if (!u) return send(res, 400, { ok: false, error: 'Thiếu user' });
+    const online = prune(await readJson('online.json', {}));
+    online[u] = { seen: Date.now(), nick: b.nick || u, avatar: b.avatar || '👤' };
+    await writeJson('online.json', online);
+    if (typeof b.typing !== 'undefined') {
+      const typing = await readJson('typing.json', {});
+      if (b.typing) typing[u] = Date.now();
+      else delete typing[u];
+      await writeJson('typing.json', typing);
     }
     return send(res, 200, { ok: true });
   }
 
   const url = new URL(req.url, 'http://localhost');
-  const since = parseInt(url.searchParams.get('since') || '0', 10);
   const me = (url.searchParams.get('user') || '').toLowerCase();
 
-  const data = readJson('messages.json', { messages: [] });
-  const all = Array.isArray(data) ? data : (data.messages || []);
-  const fresh = all.filter((m) => (m.id || 0) > since).slice(-100);
-  const online = pruneOnline();
-  const typing = getTyping(me);
-  const lastId = all.length ? all[all.length - 1].id : 0;
+  const doc = await readJson('messages.json', { messages: [] });
+  const all = Array.isArray(doc) ? doc : doc.messages || [];
+  const recent = all.slice(-WINDOW);
+  const total = all.length;
+  const lastId = total ? all[total - 1].id : 0;
+
+  const online = prune(await readJson('online.json', {}));
+  const typingRaw = await readJson('typing.json', {});
+  const now = Date.now();
+  const typing = Object.keys(typingRaw || {}).filter(
+    (u) => u !== me && now - (typingRaw[u] || 0) < TYPING_TIMEOUT
+  );
 
   return send(res, 200, {
     ok: true,
-    messages: fresh,
+    messages: recent, // toàn bộ cửa sổ 100 tin: client thêm mới + gỡ tin đã xóa
+    total,
     lastId,
     online: Object.entries(online).map(([username, v]) => ({ username, ...v })),
     typing,
-    serverTime: Date.now(),
+    storage: storageMode(),
+    serverTime: now,
   });
 };

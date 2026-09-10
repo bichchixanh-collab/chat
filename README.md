@@ -1,76 +1,84 @@
-# 💬 WAP CHAT — realtime, lưu bằng file .json, deploy Vercel
+# 💬 WAP CHAT v2 — realtime, lưu bằng file .json, deploy Vercel
 
-Giao diện wap xưa (nhẹ, hợp máy yếu), có đăng nhập, chat realtime, mặt cười 😀, sticker 🎁, hiển thị ai đang online + ai đang gõ.
+Giao diện wap xưa (nhẹ, hợp máy yếu): đăng nhập, chat realtime, mặt cười 😀, sticker 🎁, online + đang gõ, **nhận diện link** (link ảnh nhúng thumbnail), **xóa chat**, **admin panel**.
 
-## 1. Tài khoản (thay đổi được)
-
-Mở file **`data/users.json`** rồi sửa, ví dụ:
+## 1. Tài khoản (sửa trong `data/users.json`)
 
 ```json
 {
   "users": [
-    { "username": "user1", "password": "pass1", "nick": "User Một", "color": "#d60000", "avatar": "🐯" },
-    { "username": "user2", "password": "pass2", "nick": "User Hai", "color": "#0066cc", "avatar": "🐼" },
-    { "username": "user3", "password": "pass3", "nick": "User Ba", "color": "#008800", "avatar": "🦊" }
+    { "username": "admin", "password": "admin123", "nick": "Quản trị", "color": "#7c3aed", "avatar": "👑", "role": "admin" },
+    { "username": "user1", "password": "pass1", "nick": "User Một", "color": "#d60000", "avatar": "🐯", "role": "user" }
   ]
 }
 ```
 
-- Muốn thêm người: thêm 1 object vào mảng `users`.
-- Muốn đổi pass: sửa `password` rồi commit + redeploy là xong.
+- `role: "admin"` → toàn quyền: nút **⚙ Admin** hiện trong phòng chat.
+- Đổi pass / thêm người: sửa file rồi push (hoặc admin sửa ngay trong panel 👥 Users).
+- ⚠️ Đổi ngay pass `admin/admin123` sau khi deploy!
 
-Mặc định: `user1/pass1`, `user2/pass2`, `user3/pass3`.
+Mặc định: `admin/admin123` 👑, `user1/pass1`, `user2/pass2`, `user3/pass3`.
 
-## 2. Chạy thử ở máy local (không cần cài gì)
-
-Yêu cầu: Node.js >= 18.
+## 2. Chạy local (không cần cài gì, Node >= 18)
 
 ```bash
 node server.js
 # mở http://localhost:3000
 ```
 
-Mở 2-3 tab khác nhau, đăng nhập 3 user để test chat realtime.
+Mở 2-3 tab đăng nhập các user khác nhau để test realtime.
 
-## 3. Upload GitHub + deploy Vercel
+## 3. Deploy Vercel + LƯU CHAT VĨNH VIỄN (quan trọng)
 
-```bash
-git add .
-git commit -m "wap chat v1"
-git push origin main
+Vercel không cho ghi file → muốn **thoát ra vào lại vẫn còn chat, mọi user thấy chung**, phải bật backend GitHub (vẫn là file `.json` trong repo, xem/sửa được trên GitHub):
+
+1. Tạo token: GitHub → **Settings → Developer settings → Personal access tokens → Tokens (classic)** → **Generate** → tick **`repo`** → copy token (chỉ hiện 1 lần).
+2. Vercel → project → **Settings → Environment Variables**, thêm:
+   - `GITHUB_TOKEN` = token vừa copy
+   - `GITHUB_REPO` = `ten-ban/wap-chat` (nếu repo private hoặc muốn chắc ăn; repo public cùng tài khoản thì tự nhận)
+   - `GITHUB_BRANCH` = `main` (mặc định đã là `main`, khỏi thêm cũng được)
+3. **Redeploy** (Deployments → ⋯ → Redeploy).
+
+Xong: mỗi tin nhắn là 1 commit `wap-chat: update messages.json` trong repo. Chế độ lưu hiện ở chân phòng chat: `💾 github (dùng chung)` là OK. Nếu hiện `⚠️ bộ nhớ tạm` nghĩa là chưa cấu hình token → chat mất khi restart.
+
+Lưu ý: `data/meta.json` giữ ID tăng dần (để đồng bộ xóa đúng) — đừng sửa tay.
+
+## 4. Tính năng
+
+| Tính năng | Ai dùng | Cách dùng |
+|---|---|---|
+| Chat / sticker / smile realtime | mọi user | gõ + Gửi; 😀 chèn cười, 🎁 gửi sticker ngay (~2s mọi người thấy) |
+| Lịch sử dùng chung | mọi user | vào phòng là tự tải 100 tin gần nhất, thoát ra vào lại vẫn còn |
+| Nhận diện link | mọi user | dán `https://...` hoặc `www...` tự thành link bấm được; link ảnh (.jpg/.png/.gif/.webp) tự nhúng thumbnail |
+| Xóa 1 tin của mình | mọi user | nút **✕** trên tin của mình |
+| Xóa toàn bộ tin của mình | mọi user | nút **🗑 Xóa chat của tôi** dưới khung nhập |
+| Xóa tin bất kỳ | admin | nút **✕** trên mọi tin + tab 💬 trong Admin panel |
+| Xóa toàn bộ chat | admin | Admin panel → **Xóa TOÀN BỘ** (hỏi 2 lần) |
+| Xóa chat theo ngày (giờ VN) | admin | Admin panel → chọn ngày → **Xóa ngày này** |
+| Quản lý users | admin | Admin panel → tab 👥: thêm / sửa nick-pass-avatar-màu-quyền / xóa user (+chat của họ) |
+
+Mọi hành động xóa đều **realtime**: các máy khác tự cập nhật trong ~2s.
+
+## 5. Realtime kiểu gì?
+
+Vercel serverless không giữ websocket → **polling**: client quét `GET /api/messages` mỗi 2s, nhận 100 tin gần nhất + online + typing. Tin mới → ting + tự cuộn; phát hiện `total` giảm → tự vẽ lại (đồng bộ xóa). Online: ping 10s, quá 30s coi như offline.
+
+## 6. Cấu trúc
+
+```
+index.html / style.css / app.js -> giao diện wap + admin panel
+api/login.js    -> POST {username,password}
+api/messages.js -> GET poll (100 tin + online + typing) / POST heartbeat
+api/send.js     -> POST {user,text,type}
+api/delete.js   -> POST {user, action: one|mine (mọi user) / any|all|byDate (admin)}
+api/admin.js    -> GET/POST quản lý users + xem tin (chỉ admin)
+api/_store.js   -> đọc/ghi .json (file local | GitHub repo | /tmp tạm)
+data/users.json -> tài khoản ———————— sửa được
+data/messages.json -> lịch sử chat (giữ 300 tin)
+data/meta.json  -> ID tăng dần (đừng sửa tay)
+data/online.json, typing.json -> trạng thái online/đang gõ
 ```
 
-Lên [vercel.com](https://vercel.com) → **Add New → Project → Import** repo này → **Deploy**.
-Không cần chỉnh gì thêm (đã có `vercel.json`, `api/*.js` tự thành serverless functions).
+## 7. Reset chat (local)
 
-Cấu trúc:
-
-```
-index.html / style.css / app.js   -> giao diện wap
-api/login.js                      -> POST {username,password} check data/users.json
-api/messages.js                   -> GET ?since=&user= (poll realtime) + POST heartbeat online/typing
-api/send.js                       -> POST {user,text,type} (text|sticker|smile)
-api/_store.js                     -> helper đọc/ghi .json (local + /tmp trên Vercel)
-data/users.json                   -> tài khoản (sửa được)
-data/messages.json                -> lịch sử chat (app tự ghi, giữ 300 tin)
-data/online.json, typing.json     -> trạng thái online/đang gõ
-```
-
-## 4. Realtime kiểu gì?
-
-- Vercel serverless **không giữ websocket**, nên app dùng **polling**: client gọi `GET /api/messages?since=lastId` mỗi **1.5 giây**.
-- Chat / sticker / smile đều đi qua `POST /api/send` → lần poll kế tiếp là mọi người thấy ngay (~1-2s), có ting + tự cuộn.
-- Online: client ping mỗi 5s, ai quá 15s không ping coi như offline.
-- Đang gõ: client báo `typing:true` khi nhập, hiện `✍️ user1 đang gõ...`.
-
-## 5. ⚠️ Lưu ý quan trọng về file .json trên Vercel
-
-- Code đã xử lý: local thì ghi thẳng vào `data/*.json` (bạn thấy file đổi).
-- Trên Vercel, filesystem chỉ đọc → app tự chuyển sang ghi ở `/tmp/wapchat/*.json`.
-- Hệ quả: **chat sẽ mất khi Vercel cold-start / redeploy**, vì `/tmp` là tạm.
-- Đây là giới hạn của Vercel free + yêu cầu "lưu bằng file .json".
-- Khi nào cần lưu vĩnh viễn: bảo mình, mình chuyển sang Vercel KV / Postgres mà **giữ nguyên giao diện**.
-
-## 6. Reset chat
-
-Xóa tin nhắn trong `data/messages.json` về `{"messages":[]}` rồi push lại (local thì restart `node server.js`).
+Sửa `data/messages.json` về `{"messages":[]}` và `data/meta.json` về `{"nextId":1}` rồi restart `node server.js`. Trên production: vào Admin panel → Xóa TOÀN BỘ.

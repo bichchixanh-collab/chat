@@ -1,4 +1,4 @@
-/* ===== WAP CHAT — giao diện wap xưa, siêu nhẹ, mobile-first ===== */
+/* ===== WAP CHAT v2 — giao diện wap xưa, siêu nhẹ, mobile-first ===== */
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#1a1a2e;color:#222;font-family:Tahoma,Verdana,Arial,sans-serif;font-size:14px;
   background-image:repeating-linear-gradient(45deg,#1a1a2e 0 12px,#16213e 12px 24px);}
@@ -11,6 +11,7 @@ body{background:#1a1a2e;color:#222;font-family:Tahoma,Verdana,Arial,sans-serif;f
 .logo .ver{font-size:10px;background:#fbd38d;color:#744210;border-radius:8px;padding:1px 6px;vertical-align:middle}
 .statusbar{display:flex;justify-content:space-between;font-size:12px;margin-top:4px;color:#e2e8f0}
 #onlineCount{color:#9ae6b4}
+#storeWarn{background:#fff5f5;color:#c53030;border-bottom:2px solid #c53030;font-size:12px;padding:6px 10px;line-height:1.5}
 
 /* panel login */
 .panel{margin:14px;padding:12px;background:#fff;border:1px solid #2b6cb0;border-radius:8px;box-shadow:2px 2px 0 #2b6cb0}
@@ -33,18 +34,25 @@ body{background:#1a1a2e;color:#222;font-family:Tahoma,Verdana,Arial,sans-serif;f
   border-bottom:1px solid #2b6cb0;padding:5px 8px;font-size:13px}
 .linkbtn{background:none;border:none;color:#2b6cb0;font-weight:bold;cursor:pointer;font-size:13px;margin-left:8px}
 .linkbtn:active{color:#c53030}
+#btnAdmin{color:#7c3aed}
 #onlineBar{font-size:12px;background:#fffff0;border-bottom:1px dotted #999;padding:5px 8px;line-height:1.6;min-height:26px}
 #typingBar{font-size:12px;color:#2b6cb0;font-style:italic;padding:2px 8px;min-height:18px}
-#msgs{flex:1;overflow-y:auto;padding:8px;height:calc(100vh - 250px);min-height:300px;background:
+#msgs{flex:1;overflow-y:auto;padding:8px;height:calc(100vh - 290px);min-height:280px;background:
   repeating-linear-gradient(#f2f4f8 0 28px,#eef2f7 28px 29px)}
-.msg{margin-bottom:8px;background:#fff;border:1px solid #cbd5e0;border-radius:0 8px 8px 8px;padding:5px 8px;font-size:14px;word-wrap:break-word}
+.msg{margin-bottom:8px;background:#fff;border:1px solid #cbd5e0;border-radius:0 8px 8px 8px;padding:5px 8px;font-size:14px;word-wrap:break-word;position:relative}
 .msg.me{background:#ebf8ff;border-color:#2b6cb0;border-radius:8px 0 8px 8px}
-.msg .head{font-size:12px;margin-bottom:2px}
+.msg .head{font-size:12px;margin-bottom:2px;padding-right:20px}
 .msg .head b{cursor:pointer}
 .msg .time{color:#999;font-size:11px;float:right}
 .msg .body{line-height:1.5}
 .msg.stickerMsg .body,.msg.smileMsg .body{font-size:32px;line-height:1.3}
 .msg.sys{background:#fffbeb;border:1px dashed #d69e31;text-align:center;font-size:12px;color:#744210;border-radius:8px}
+.msg .body a{color:#2b6cb0;text-decoration:underline;word-break:break-all}
+.msg .body a:active{color:#c53030}
+.chatimg{max-width:100%;max-height:220px;border-radius:6px;border:1px solid #cbd5e0;margin-top:4px}
+.delbtn{position:absolute;top:3px;right:5px;background:none;border:none;color:#bbb;cursor:pointer;font-size:13px;padding:2px 4px}
+.delbtn:active{color:#c53030}
+.msg:hover .delbtn{color:#e53e3e}
 
 /* panel smile / sticker */
 #smilePanel,#stickerPanel{background:#fff;border-top:2px solid #2b6cb0;padding:8px;display:grid;gap:4px;max-height:170px;overflow-y:auto}
@@ -54,12 +62,40 @@ body{background:#1a1a2e;color:#222;font-family:Tahoma,Verdana,Arial,sans-serif;f
 #stickerPanel span{font-size:34px}
 #smilePanel span:active,#stickerPanel span:active{background:#bee3f8;transform:scale(1.15)}
 
-/* input */
+/* admin panel */
+#adminPanel{background:#faf5ff;border-top:2px solid #7c3aed;max-height:320px;overflow-y:auto;padding:8px;font-size:13px}
+#adminPanel h3{color:#553c9a;font-size:14px;margin-bottom:6px}
+.atabs{display:flex;gap:4px;margin-bottom:8px}
+.atabs button{flex:1;padding:6px;border:1px solid #7c3aed;background:#fff;color:#553c9a;border-radius:5px;font-weight:bold;cursor:pointer;font-size:13px}
+.atabs button.on{background:#7c3aed;color:#fff}
+.arow{display:flex;gap:4px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
+.arow input,.arow select{padding:6px;border:1px solid #999;border-radius:5px;font-size:13px}
+.arow input[type=text],.arow input:not([type]),.arow input[type=password],.arow input[type=date]{flex:1;min-width:0}
+.abtn{background:#7c3aed;color:#fff;border:1px solid #553c9a;border-radius:5px;padding:6px 10px;font-weight:bold;cursor:pointer;font-size:13px}
+.abtn:active{transform:translateY(1px)}
+.abtn.danger{background:linear-gradient(#f56565,#9b2c2c);border-color:#742a2a}
+.abtn.small{padding:3px 8px;font-size:12px}
+.amsg{display:flex;gap:6px;align-items:flex-start;background:#fff;border:1px solid #d6bcfa;border-radius:6px;padding:4px 6px;margin-bottom:4px;font-size:12px}
+.amsg .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.amsg .tm{color:#999;font-size:11px;white-space:nowrap}
+.auser{background:#fff;border:1px solid #d6bcfa;border-radius:6px;padding:6px;margin-bottom:6px}
+.auser .urow{display:flex;gap:4px;margin-top:4px}
+.auser input,.auser select{padding:5px;border:1px solid #999;border-radius:4px;font-size:12px;min-width:0}
+.auser input{flex:1}
+.auser .uname{font-weight:bold;color:#553c9a}
+.auser .role{font-size:11px;background:#ede9fe;border-radius:8px;padding:1px 7px}
+
+/* input + toolbar */
 #inputBar{display:flex;gap:4px;padding:6px;background:#2d3748;border-top:2px solid #fbd38d;position:sticky;bottom:0}
 #inputBar button{background:#fff;border:1px solid #888;border-radius:6px;font-size:18px;padding:6px 9px;cursor:pointer}
 #inputBar button.active{background:#fbd38d;border-color:#d69e31}
 #inMsg{flex:1;padding:9px;border:1px solid #888;border-radius:6px;font-size:15px;min-width:0}
 #btnSend{font-size:14px!important;background:linear-gradient(#48bb78,#276749)!important;color:#fff!important;font-weight:bold}
+#toolBar{display:flex;align-items:center;gap:6px;background:#2d3748;padding:0 6px 5px;font-size:12px}
+.toolbtn{background:#4a5568;color:#fed7d7;border:1px solid #742a2a;border-radius:5px;padding:4px 8px;font-size:12px;cursor:pointer}
+.toolbtn:active{background:#742a2a}
+#toolBar .spacer{flex:1}
+#storeBadge{color:#a0aec0;font-size:11px}
 .footer{font-size:11px;text-align:center;color:#a0aec0;background:#2d3748;padding:3px 0 6px}
 
 /* desktop căn giữa cho đẹp */
