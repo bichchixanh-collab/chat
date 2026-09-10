@@ -10,16 +10,6 @@
       "text": "Chào mừng đến với WAP CHAT! Mời admin, user1, user2, user3 đăng nhập để chém gió.",
       "type": "system",
       "time": 1725800000000
-    },
-    {
-      "id": 1789046082517179,
-      "user": "user1",
-      "nick": "User Một",
-      "avatar": "🐯",
-      "color": "#d60000",
-      "text": "🥳",
-      "type": "sticker",
-      "time": 1789046082290
     }
   ]
 }
