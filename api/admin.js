@@ -4,7 +4,7 @@
 //   action=addUser    { username, password, nick, color, avatar, role }
 //   action=updateUser { username, password?, nick?, color?, avatar?, role? }
 //   action=delUser    { username } (xóa cả user + toàn bộ chat của user đó)
-const { findUser, isAdmin, getMessages, saveMessages, pushSystem, readJson, writeJson, send, body, cors, storageMode } = require('./_store');
+const { findUser, isAdmin, getMessages, saveMessages, pushSystem, withLock, readJson, writeJson, send, body, cors, storageMode } = require('./_store');
 
 async function readUserDoc() {
   const doc = await readJson('users.json', { users: [] });
@@ -97,10 +97,13 @@ module.exports = async (req, res) => {
       return send(res, 400, { ok: false, error: 'Không xóa admin cuối cùng!' });
     doc.users.splice(idx, 1);
     if (!(await writeJson('users.json', doc))) return send(res, 500, { ok: false, error: 'Ghi file thất bại!' });
-    const msgs = await getMessages();
-    const mine = msgs.filter((m) => m.user === username).length;
-    await saveMessages(msgs.filter((m) => m.user !== username));
-    await pushSystem(`🔔 Admin đã xóa thành viên ${username} (+${mine} tin)`);
+    const mine = await withLock(async () => {
+      const msgs = await getMessages();
+      const n = msgs.filter((m) => m.user === username).length;
+      const rest = msgs.filter((m) => m.user !== username);
+      await pushSystem(`🔔 Admin đã xóa thành viên ${username} (+${n} tin)`, rest);
+      return n;
+    });
     return send(res, 200, { ok: true, users: doc.users, deletedMessages: mine });
   }
 

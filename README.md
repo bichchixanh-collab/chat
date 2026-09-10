@@ -43,6 +43,13 @@ Xong: mỗi tin nhắn là 1 commit `wap-chat: update messages.json` trong repo.
 
 Lưu ý: `data/meta.json` giữ ID tăng dần (để đồng bộ xóa đúng) — đừng sửa tay.
 
+## 8. Tốc độ đồng bộ (delay bao nhiêu là bình thường?)
+
+- Gửi → hiện ở máy khác mất khoảng **2-4s**: gồm 1 lần ghi GitHub (~1-2s, GitHub phải tạo commit) + poll 1s của máy nhận.
+- Lần đầu mở web sau một lúc không ai dùng có thể chậm thêm 1-3s (Vercel "ngủ đông", cần hâm máy).
+- Code đã tối ưu: đọc/ghi song song trong 1 vòng, poll dùng ETag (304, không tốn rate-limit), ID theo thời gian (không cần file meta).
+- **Giới hạn cứng**: chừng nào còn ghi file qua GitHub API thì không thể dưới ~1-2s. Muốn gần như tức thì (<1s) phải đổi backend realtime (Supabase/Vercel KV...) — vẫn giữ nguyên giao diện, bảo mình là mình chuyển.
+
 ## 4. Tính năng
 
 | Tính năng | Ai dùng | Cách dùng |
@@ -61,7 +68,7 @@ Mọi hành động xóa đều **realtime**: các máy khác tự cập nhật 
 
 ## 5. Realtime kiểu gì?
 
-Vercel serverless không giữ websocket → **polling**: client quét `GET /api/messages` mỗi 2s, nhận 100 tin gần nhất + online + typing. Tin mới → ting + tự cuộn; phát hiện `total` giảm → tự vẽ lại (đồng bộ xóa). Online: ping 10s, quá 30s coi như offline.
+Vercel serverless không giữ websocket → **polling**: client quét `GET /api/messages` mỗi 1s, nhận 100 tin gần nhất + online + typing. Tin mới → ting + tự cuộn; phát hiện `total` giảm → tự vẽ lại (đồng bộ xóa). Online: ping 10s, quá 30s coi như offline.
 
 ## 6. Cấu trúc
 
@@ -69,16 +76,15 @@ Vercel serverless không giữ websocket → **polling**: client quét `GET /api
 index.html / style.css / app.js -> giao diện wap + admin panel
 api/login.js    -> POST {username,password}
 api/messages.js -> GET poll (100 tin + online + typing) / POST heartbeat
-api/send.js     -> POST {user,text,type}
+api/send.js     -> POST {user,text,type} (đọc/ghi song song + xếp hàng chống mất tin)
 api/delete.js   -> POST {user, action: one|mine (mọi user) / any|all|byDate (admin)}
 api/admin.js    -> GET/POST quản lý users + xem tin (chỉ admin)
-api/_store.js   -> đọc/ghi .json (file local | GitHub repo | /tmp tạm)
+api/_store.js   -> đọc/ghi .json (file local | GitHub repo | /tmp tạm) + genId + lock
 data/users.json -> tài khoản ———————— sửa được
 data/messages.json -> lịch sử chat (giữ 300 tin)
-data/meta.json  -> ID tăng dần (đừng sửa tay)
 data/online.json, typing.json -> trạng thái online/đang gõ
 ```
 
 ## 7. Reset chat (local)
 
-Sửa `data/messages.json` về `{"messages":[]}` và `data/meta.json` về `{"nextId":1}` rồi restart `node server.js`. Trên production: vào Admin panel → Xóa TOÀN BỘ.
+Sửa `data/messages.json` về `{"messages":[]}` rồi restart `node server.js`. Trên production: vào Admin panel → Xóa TOÀN BỘ.

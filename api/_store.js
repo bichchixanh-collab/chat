@@ -187,26 +187,24 @@ async function saveMessages(arr) {
   return writeJson('messages.json', keep);
 }
 
-// ID tăng đơn điệu, không tái sử dụng sau khi xóa → client đồng bộ xóa đúng
-async function nextId() {
-  const m = await readJson('meta.json', { nextId: 0 });
-  let n = (m && m.nextId) || 0;
-  if (!n) {
-    const all = await getMessages();
-    n = all.reduce((mx, x) => Math.max(mx, x.id || 0), 0);
-  }
-  n += 1;
-  const doc = m && typeof m === 'object' && !Array.isArray(m) ? m : {};
-  doc.nextId = n;
-  await writeJson('meta.json', doc);
-  return n;
+// ID duy nhất, tăng dần theo thời gian — không cần file meta, bớt 1 vòng đọc/ghi mỗi tin.
+// (Date.now()*1000 + ngẫu nhiên: vừa so sánh được m.id > lastId, vừa không trùng kể cả gửi cùng mili-giây)
+function genId() {
+  return Date.now() * 1000 + Math.floor(Math.random() * 1000);
 }
 
-async function pushSystem(text) {
-  const all = await getMessages();
-  const id = await nextId();
+// Khóa ghi trong cùng instance: xếp hàng các request sửa messages để không ghi đè mất tin của nhau.
+let writeLock = Promise.resolve();
+function withLock(fn) {
+  const run = writeLock.then(fn, fn);
+  writeLock = run.catch(() => {});
+  return run;
+}
+
+async function pushSystem(text, knownAll) {
+  const all = knownAll || (await getMessages());
   all.push({
-    id,
+    id: genId(),
     user: 'system',
     nick: 'Hệ thống',
     avatar: '📢',
@@ -216,7 +214,6 @@ async function pushSystem(text) {
     time: Date.now(),
   });
   await saveMessages(all);
-  return id;
 }
 
 // Ngày theo giờ Việt Nam (dùng cho "xóa chat theo ngày")
@@ -260,7 +257,8 @@ module.exports = {
   isAdmin,
   getMessages,
   saveMessages,
-  nextId,
+  genId,
+  withLock,
   pushSystem,
   vnDate,
   send,

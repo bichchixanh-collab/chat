@@ -1,4 +1,4 @@
-/* WAP CHAT v2 frontend — polling 2s, lịch sử dùng chung, linkify, xóa chat, admin panel */
+/* WAP CHAT v2 frontend — polling 1s, lịch sử dùng chung, linkify, xóa chat, admin panel */
 const $ = (id) => document.getElementById(id);
 const els = {
   loginBox: $('loginBox'), chatBox: $('chatBox'),
@@ -401,7 +401,7 @@ function enterChat() {
   toggleAdmin(false);
   poll(); heartbeat(false);
   clearInterval(pollTimer); clearInterval(heartTimer);
-  pollTimer = setInterval(poll, 2000);              // realtime: quét mỗi 2s
+  pollTimer = setInterval(poll, 1000);              // realtime: quét mỗi 1s (poll GitHub 304 rất nhẹ)
   heartTimer = setInterval(() => heartbeat(false), 10000); // giữ online
 }
 function doLogout() {

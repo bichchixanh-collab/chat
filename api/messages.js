@@ -1,5 +1,4 @@
-// GET  /api/messages?user=x  -> poll realtime: trả 100 tin gần nhất + online + typing
-//   Client tự so id mới / id biến mất để thêm tin + đồng bộ các tin đã bị xóa (realtime).
+// GET  /api/messages?user=x  -> poll realtime: 100 tin gần nhất + online + typing (đọc song song)
 // POST /api/messages { user, nick, avatar, typing } -> heartbeat online (10s/lần)
 const { readJson, writeJson, send, body, cors, storageMode } = require('./_store');
 
@@ -24,29 +23,35 @@ module.exports = async (req, res) => {
     const b = await body(req);
     const u = String(b.user || '').trim().toLowerCase();
     if (!u) return send(res, 400, { ok: false, error: 'Thiếu user' });
-    const online = prune(await readJson('online.json', {}));
+    const [onlineRaw, typing] = await Promise.all([
+      readJson('online.json', {}),
+      readJson('typing.json', {}),
+    ]);
+    const online = prune(onlineRaw);
     online[u] = { seen: Date.now(), nick: b.nick || u, avatar: b.avatar || '👤' };
-    await writeJson('online.json', online);
     if (typeof b.typing !== 'undefined') {
-      const typing = await readJson('typing.json', {});
       if (b.typing) typing[u] = Date.now();
       else delete typing[u];
-      await writeJson('typing.json', typing);
     }
+    await Promise.all([writeJson('online.json', online), writeJson('typing.json', typing)]);
     return send(res, 200, { ok: true });
   }
 
   const url = new URL(req.url, 'http://localhost');
   const me = (url.searchParams.get('user') || '').toLowerCase();
 
-  const doc = await readJson('messages.json', { messages: [] });
+  // 1 vòng đọc song song (GitHub 304 dùng ETag nên poll rất nhẹ)
+  const [doc, onlineRaw, typingRaw] = await Promise.all([
+    readJson('messages.json', { messages: [] }),
+    readJson('online.json', {}),
+    readJson('typing.json', {}),
+  ]);
   const all = Array.isArray(doc) ? doc : doc.messages || [];
   const recent = all.slice(-WINDOW);
   const total = all.length;
   const lastId = total ? all[total - 1].id : 0;
 
-  const online = prune(await readJson('online.json', {}));
-  const typingRaw = await readJson('typing.json', {});
+  const online = prune(onlineRaw); // chỉ lọc, không ghi (đỡ tốn 1 write mỗi poll)
   const now = Date.now();
   const typing = Object.keys(typingRaw || {}).filter(
     (u) => u !== me && now - (typingRaw[u] || 0) < TYPING_TIMEOUT
@@ -54,7 +59,7 @@ module.exports = async (req, res) => {
 
   return send(res, 200, {
     ok: true,
-    messages: recent, // toàn bộ cửa sổ 100 tin: client thêm mới + gỡ tin đã xóa
+    messages: recent,
     total,
     lastId,
     online: Object.entries(online).map(([username, v]) => ({ username, ...v })),
