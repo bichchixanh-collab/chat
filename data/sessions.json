@@ -1,13 +1,9 @@
 {
   "// HƯỚNG DẪN": "Phiên đăng nhập 24h. Server chỉ lưu SHA256 của token (không lộ phiên). App tự dọn, không cần sửa tay.",
   "sessions": {
-    "9d335d81063d709a8be92643e3e02b0b72623a954688bf40ace5b7d9f90a960c": {
-      "user": "user3",
-      "expiry": 1789132181565
-    },
-    "c0ba941745863b848e095a98edafe6739217859b738a05da7a0948bf480ba700": {
-      "user": "admin",
-      "expiry": 1789132516169
+    "25a97317906cae950b0a25d4503e37ea3ee1d61f672058c4428b05c572d1d58b": {
+      "user": "user1",
+      "expiry": 1789230411723
     }
   }
 }
